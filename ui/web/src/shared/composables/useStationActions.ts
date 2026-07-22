@@ -17,13 +17,15 @@ export function useStationActions (options?: { onRefresh?: () => void }): {
   closeConnection: (hashId: string) => void
   deleteStation: (hashId: string, onSuccess?: () => void) => void
   openConnection: (hashId: string) => void
-  pending: Readonly<{ connection: boolean; delete: boolean; startStop: boolean }>
+  pending: Readonly<{ atg: boolean; connection: boolean; delete: boolean; startStop: boolean }>
+  startATG: (hashId: string) => void
   startStation: (hashId: string) => void
+  stopATG: (hashId: string) => void
   stopStation: (hashId: string) => void
 } {
   const $uiClient = useUIClient()
   const { pending, run } = useAsyncAction(
-    { connection: false, delete: false, startStop: false },
+    { atg: false, connection: false, delete: false, startStop: false },
     options?.onRefresh
   )
 
@@ -68,12 +70,31 @@ export function useStationActions (options?: { onRefresh?: () => void }): {
     })
   }
 
+  // Omitting connectorId targets every connector of the station in a single request.
+  const startATG = (hashId: string): void => {
+    run('atg', {
+      action: () => $uiClient.startAutomaticTransactionGenerator(hashId),
+      errorMsg: 'Error starting ATG',
+      successMsg: 'ATG started',
+    })
+  }
+
+  const stopATG = (hashId: string): void => {
+    run('atg', {
+      action: () => $uiClient.stopAutomaticTransactionGenerator(hashId),
+      errorMsg: 'Error stopping ATG',
+      successMsg: 'ATG stopped',
+    })
+  }
+
   return {
     closeConnection,
     deleteStation,
     openConnection,
     pending: readonly(pending),
+    startATG,
     startStation,
+    stopATG,
     stopStation,
   }
 }

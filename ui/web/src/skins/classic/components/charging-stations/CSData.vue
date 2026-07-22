@@ -73,6 +73,13 @@
       <Button @click="deleteChargingStation()">
         Delete Charging Station
       </Button>
+      <StateButton
+        :active="isAtgRunning"
+        :off="() => stopATG(hashId)"
+        off-label="Stop ATG"
+        :on="() => startATG(hashId)"
+        on-label="Start ATG"
+      />
     </td>
     <td class="cs-data__connectors-cell">
       <table class="data-table">
@@ -158,7 +165,9 @@ const {
   closeConnection,
   deleteStation,
   openConnection,
+  startATG,
   startStation: startChargingStation,
+  stopATG,
   stopStation: stopChargingStation,
 } = useStationActions({
   onRefresh: () => {
@@ -167,6 +176,11 @@ const {
 })
 
 const hashId = computed(() => props.chargingStation.stationInfo.hashId)
+
+// Reflects "on" when any connector has ATG running; the toggle button acts on all connectors at once.
+const isAtgRunning = computed(() =>
+  connectorEntries.value.some(entry => getATGStatusForConnector(entry.connectorId)?.start === true)
+)
 
 const deleteChargingStation = (): void => {
   deleteStation(hashId.value, () => {

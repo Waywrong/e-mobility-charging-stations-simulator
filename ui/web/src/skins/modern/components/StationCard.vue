@@ -136,6 +136,13 @@
         >
           Authorize
         </ActionButton>
+        <ActionButton
+          :variant="atgRunning ? 'default' : 'ghost'"
+          :pending="pending.atg"
+          @click="toggleAtg"
+        >
+          {{ atgRunning ? 'Stop ATG' : 'Start ATG' }}
+        </ActionButton>
       </div>
       <ActionButton
         variant="danger"
@@ -201,8 +208,16 @@ const emit = defineEmits<{
 
 const confirmingDelete = ref(false)
 
-const { closeConnection, deleteStation, openConnection, pending, startStation, stopStation } =
-  useStationActions()
+const {
+  closeConnection,
+  deleteStation,
+  openConnection,
+  pending,
+  startATG,
+  startStation,
+  stopATG,
+  stopStation,
+} = useStationActions()
 
 const wsOpen = computed(() => props.chargingStation.wsState === WebSocketReadyState.OPEN)
 
@@ -222,6 +237,11 @@ const connectors = computed<ConnectorEntry[]>(() => getConnectorEntries(props.ch
 const getATGStatusForConnector = (connectorId: number): Status | undefined =>
   getATGStatus(props.chargingStation, connectorId)
 
+// Reflects "on" when any connector has ATG running; the toggle button acts on all connectors at once.
+const atgRunning = computed(() =>
+  connectors.value.some(entry => getATGStatusForConnector(entry.connectorId)?.start === true)
+)
+
 const toggleStation = (): void => {
   const hashId = props.chargingStation.stationInfo.hashId
   if (props.chargingStation.started) {
@@ -237,6 +257,15 @@ const toggleConnection = (): void => {
     closeConnection(hashId)
   } else {
     openConnection(hashId)
+  }
+}
+
+const toggleAtg = (): void => {
+  const hashId = props.chargingStation.stationInfo.hashId
+  if (atgRunning.value) {
+    stopATG(hashId)
+  } else {
+    startATG(hashId)
   }
 }
 

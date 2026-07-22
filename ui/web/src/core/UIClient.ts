@@ -175,11 +175,11 @@ export class UIClient {
 
   public async startAutomaticTransactionGenerator (
     hashId: string,
-    connectorId: number
+    connectorId?: number
   ): Promise<ResponsePayload> {
     return this.sendRequest(ProcedureName.START_AUTOMATIC_TRANSACTION_GENERATOR, {
-      connectorIds: [connectorId],
       hashIds: [hashId],
+      ...(connectorId != null && { connectorIds: [connectorId] }),
     })
   }
 
@@ -218,11 +218,11 @@ export class UIClient {
 
   public async stopAutomaticTransactionGenerator (
     hashId: string,
-    connectorId: number
+    connectorId?: number
   ): Promise<ResponsePayload> {
     return this.sendRequest(ProcedureName.STOP_AUTOMATIC_TRANSACTION_GENERATOR, {
-      connectorIds: [connectorId],
       hashIds: [hashId],
+      ...(connectorId != null && { connectorIds: [connectorId] }),
     })
   }
 
