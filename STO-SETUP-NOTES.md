@@ -154,6 +154,57 @@ debug: ... OCPPRequestService.internalSendMessage: >> Command 'SetChargingProfil
 如果之後測其他 charging profile 情境回 `Rejected` 而非 `Accepted`，先看
 是不是踩到這些條件，不一定是同一個 `SmartCharging` 問題。
 
+#### TriggerMessage(StatusNotification) 回 `NotImplemented` 的問題（2026-07-22 修好）
+
+STO 呼叫 `POST /api/v1/transactions/trigger_message`（`triggerMessage: "StatusNotification"`）
+時，模擬器原本回 `{"status":"NotImplemented"}`，而且**就算修好回應狀態，也不會真的
+補送 StatusNotification**——這是模擬器程式碼本身缺兩塊，跟 SetChargingProfile 只需要
+改設定檔不一樣，這次真的動了 `src/` 的程式邏輯。
+
+**原因 1（跟 SmartCharging 一樣的模式）**：`handleRequestTriggerMessage` 一樣會先檢查
+`SupportedFeatureProfiles` 裡有沒有 `RemoteTrigger`，siemens template 原本沒有，
+所以直接被擋掉回 `NotImplemented`。修法一樣是加到 `SupportedFeatureProfiles`：
+```json
+"value": "Core,LocalAuthListManagement,Reservation,SmartCharging,RemoteTrigger"
+```
+
+**原因 2（程式碼本身沒實作，不是設定問題）**：就算 `RemoteTrigger` 加上去，原本
+`handleRequestTriggerMessage` 對 `StatusNotification`/`BootNotification`/`Heartbeat`/
+`MeterValues`/`Diagnostics-`/`FirmwareStatusNotification` 這幾種 trigger 類型，
+**全部都只是直接回 `Accepted`，沒有任何一種會真的去補送對應的訊息**。真實充電樁的行為
+是：先回 `TriggerMessage.conf {"status":"Accepted"}`，然後**另外、非同步地**把被
+要求的訊息（例如 `StatusNotification`）送出去。
+
+已經在 `src/charging-station/ocpp/1.6/OCPP16IncomingRequestService.ts` 補上
+`StatusNotification` 這個 case 的實際行為（其他 5 種 trigger 類型維持原樣，只回
+`Accepted`，沒有一併補實作——這次只針對有問到的 `StatusNotification`）：
+- 新增 `private async triggerStatusNotification(chargingStation, connectorId?)`：
+  如果 request 有帶 `connectorId`，只重送那一個 connector 的**目前狀態**
+  （不會改變狀態，只是重新公告一次）；如果沒帶 `connectorId`（這次 curl 就是這樣），
+  就用 `chargingStation.iterateConnectors(true)`（`true` = 跳過 connector 0）
+  對**每一個實體 connector**都送一次，符合真實充電樁「沒指定 connector 就全部
+  connector 都送」的行為（這次實測两個 connector 都有送）。
+- `handleRequestTriggerMessage` 的 `StatusNotification` case 呼叫這個新方法但**不 `await`
+  它**（fire-and-forget，接 `.catch` 記 log），因為 `TriggerMessage.conf` 要先回，
+  StatusNotification 是之後才送的獨立訊息，這跟真實充電樁的時序一致。
+
+一樣要記得：改完 `src/` 程式碼要 `pnpm build`（`ctl.sh start`/`restart` 內建會做），
+純程式邏輯改動這次不影響 `dist/assets/configurations/*.json` 的持久化內容
+（沒有新增 configurationKey），但因為同時也改了 `SupportedFeatureProfiles`，
+一樣要清掉舊的持久化檔重新產生。
+
+**驗證方式**：一樣暫時把 `log.level` 改成 `"debug"`，重送 curl，應該在
+`run/simulator.log` 看到：
+```
+debug: ... ChargingStation.handleIncomingMessage: << Command 'TriggerMessage' received request payload: [2,"...","TriggerMessage",{"requestedMessage":"StatusNotification"}]
+debug: ... OCPPRequestService.internalSendMessage: >> Command 'TriggerMessage' sent response payload: [3,"...",{"status":"Accepted"}]
+debug: ... OCPPRequestService.internalSendMessage: >> Command 'StatusNotification' sent request payload: [2,"...","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Unavailable"}]
+debug: ... OCPPRequestService.internalSendMessage: >> Command 'StatusNotification' sent request payload: [2,"...","StatusNotification",{"connectorId":2,"errorCode":"NoError","status":"Available"}]
+```
+（connector 1 顯示 `Unavailable` 是因為 siemens template 裡 connector 1 的
+`bootStatus` 就設定成 `Unavailable`，不是 bug——這個功能只是「如實重新公告目前狀態」，
+不會把狀態改成 `Available`。）驗證完記得把 `log.level` 改回去、重啟一次。
+
 - `AutomaticTransactionGenerator.enable`：**預設維持 `false`**（開機/重啟不會自動跑
   ATG）。要測自動充電交易時，**不要改這個檔案**，改用 Web UI 的 `Start ATG` /
   `Stop ATG` 按鈕手動開關（見下面「Web UI」章節的「站級 ATG 開關」）。

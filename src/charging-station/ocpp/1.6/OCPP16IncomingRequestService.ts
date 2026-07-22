@@ -1890,7 +1890,16 @@ export class OCPP16IncomingRequestService extends OCPPIncomingRequestService<OCP
       case OCPP16MessageTrigger.FirmwareStatusNotification:
       case OCPP16MessageTrigger.Heartbeat:
       case OCPP16MessageTrigger.MeterValues:
+        return OCPP16Constants.OCPP_TRIGGER_MESSAGE_RESPONSE_ACCEPTED
       case OCPP16MessageTrigger.StatusNotification:
+        // Fire-and-forget: the StatusNotification.req(s) follow the
+        // TriggerMessage.conf as separate, later messages per OCPP 1.6 §4.28.
+        this.triggerStatusNotification(chargingStation, connectorId).catch((error: unknown) => {
+          logger.error(
+            `${chargingStation.logPrefix()} ${moduleName}.handleRequestTriggerMessage: Error while sending triggered StatusNotification`,
+            error
+          )
+        })
         return OCPP16Constants.OCPP_TRIGGER_MESSAGE_RESPONSE_ACCEPTED
       default:
         return OCPP16Constants.OCPP_TRIGGER_MESSAGE_RESPONSE_NOT_IMPLEMENTED
@@ -2003,6 +2012,34 @@ export class OCPP16IncomingRequestService extends OCPPIncomingRequestService<OCP
       } charging profile(s)${chargingProfile.transactionId != null ? ' with transactionId set' : ''} at remote start transaction`
     )
     return false
+  }
+
+  /**
+   * Re-announces the current status of one connector, or of every physical
+   * connector when none is specified, in response to a
+   * TriggerMessage(StatusNotification) request.
+   * @param chargingStation - Target charging station
+   * @param connectorId - Specific connector to re-announce, or `undefined` for all physical connectors
+   */
+  private async triggerStatusNotification (
+    chargingStation: ChargingStation,
+    connectorId?: number
+  ): Promise<void> {
+    const connectorIds =
+      connectorId != null
+        ? [connectorId]
+        : [...chargingStation.iterateConnectors(true)].map(entry => entry.connectorId)
+    for (const id of connectorIds) {
+      const connectorStatus = chargingStation.getConnectorStatus(id)
+      if (connectorStatus == null) {
+        continue
+      }
+      await sendAndSetConnectorStatus(chargingStation, {
+        connectorId: id,
+        errorCode: connectorStatus.errorCode,
+        status: connectorStatus.status,
+      })
+    }
   }
 
   private async updateFirmwareSimulation (
