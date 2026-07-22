@@ -1,7 +1,7 @@
 {
   "$schemaVersion": 1,
   "idTagsFile": "idtags.json",
-  "baseName": "CS-SIEMENS",
+  "baseName": "1060101",
   "fixedName": true,
   "chargePointModel": "SIEMENSXX213",
   "chargePointVendor": "SIEMENS",

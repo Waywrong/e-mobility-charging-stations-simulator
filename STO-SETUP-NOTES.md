@@ -80,9 +80,41 @@ STO 資料庫裡目前只有一張已註冊的 RFID/idTag：`stoIdtag202604j`
 
 - 這個 template 沒寫 `ocppVersion`，預設就是 **OCPP 1.6**（2.0.x 的 template，例如
   `keba-ocpp2.station-template.json`，才會明寫 `"ocppVersion": "2.0.1"`）。
-- `fixedName: true` + `baseName: "CS-SIEMENS"` → 模擬出來的 chargingStationId
-  **就是** `CS-SIEMENS`（沒有 index 後綴）。程式邏輯在
-  `src/charging-station/HelpersId.ts` 的 `getChargingStationId()`。
+- `fixedName: true` + `baseName` → 模擬出來的 chargingStationId **就是**
+  `baseName` 的值（沒有 index 後綴）。程式邏輯在 `src/charging-station/HelpersId.ts`
+  的 `getChargingStationId()`。**目前用的值是 `"1060101"`**（原本測試用
+  `"CS-SIEMENS"`，2026-07-22 改過一次，見下方「改 ChargeBox ID」）。
+  改這個欄位屬於程式碼/資源檔（`src/assets/...`），**改完要 `pnpm build`**
+  （或直接 `./ctl.sh start`/`restart`，裡面本來就會 build）才會生效，因為
+  執行期讀的是 `dist/assets/station-templates/`，不是 `src/`。
+
+#### 改 ChargeBox ID 的完整步驟（實測過，2026-07-22 把 `CS-SIEMENS` 改成 `1060101`）
+
+1. 改 `baseName`（見上面）
+2. 去 STO 註冊新的 chargeBoxId（STO 不接受未註冊的 ID）：
+   ```bash
+   docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+     -e "INSERT INTO charge_box (charge_box_id, insert_connector_status_after_transaction_msg) VALUES ('1060101', 0);"
+   ```
+3. chargingStationId 變了 → hashId 也變了 → 舊的持久化設定檔
+   （`dist/assets/configurations/<舊hashId>.json`）變成孤兒檔，清掉：
+   ```bash
+   rm -f dist/assets/configurations/*.json
+   ```
+4. `./ctl.sh stop && ./ctl.sh start`（內建會 `pnpm build`）
+5. 雙邊驗證：
+   - 模擬器 log 應該看到 `Charging station 1060101 (hashId: ...)`、
+     連到 `.../CentralSystemService/1060101`、`BootNotification ... 'Accepted'`
+   - STO DB 反查：
+     ```bash
+     docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+       -e "SELECT charge_box_id, charge_point_vendor, charge_point_model, last_heartbeat_timestamp FROM charge_box WHERE charge_box_id='1060101';"
+     ```
+     要看到 vendor/model 有值、`last_heartbeat_timestamp` 是剛剛的時間
+   - 開 http://localhost:3030 確認卡片標題變成新 ID、`STARTED`/`WS OPEN`/`Accepted`
+
+舊的 `CS-SIEMENS` 那筆在 STO 的 `charge_box` table 裡沒有刪，留著無害
+（不會有東西再去連它），要清的話自己去 STO 網頁或 DB 刪即可。
 - `AutomaticTransactionGenerator.enable`：**預設維持 `false`**（開機/重啟不會自動跑
   ATG）。要測自動充電交易時，**不要改這個檔案**，改用 Web UI 的 `Start ATG` /
   `Stop ATG` 按鈕手動開關（見下面「Web UI」章節的「站級 ATG 開關」）。
