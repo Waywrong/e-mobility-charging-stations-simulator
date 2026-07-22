@@ -1,0 +1,76 @@
+<template>
+  <div class="skin-load-error">
+    <p>Failed to load skin layout.</p>
+    <button @click="$emit('retry')">
+      Retry
+    </button>
+    <button @click="resetToDefault">
+      Switch to {{ defaultSkinLabel }}
+    </button>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {
+  DEFAULT_SKIN,
+  MAX_SKIN_ERROR_RELOADS,
+  setToLocalStorage,
+  SKIN_ERROR_RELOAD_COUNT_KEY,
+  SKIN_STORAGE_KEY,
+} from '@/core/index.js'
+// Intentional: registry.ts is pure metadata (ids, labels, loaders) — no behavioral coupling.
+import { skins } from '@/skins/registry.js'
+
+defineEmits<{ retry: [] }>()
+
+const defaultSkinLabel = skins.find(s => s.id === DEFAULT_SKIN)?.label ?? 'Default'
+
+/** Resets to default skin with reload loop protection. Counter is reset by `useSkin.switchSkin` on successful load. */
+function resetToDefault (): void {
+  let count = 0
+  try {
+    count = Number(sessionStorage.getItem(SKIN_ERROR_RELOAD_COUNT_KEY) ?? '0')
+  } catch {
+    // sessionStorage unavailable (e.g. Safari private browsing)
+  }
+  if (count >= MAX_SKIN_ERROR_RELOADS) {
+    // Stop infinite reload loop — show message instead
+    return
+  }
+  try {
+    sessionStorage.setItem(SKIN_ERROR_RELOAD_COUNT_KEY, String(count + 1))
+  } catch {
+    // sessionStorage unavailable — proceed with reset anyway
+  }
+  setToLocalStorage<string>(SKIN_STORAGE_KEY, DEFAULT_SKIN)
+  window.location.reload()
+}
+</script>
+
+<style scoped>
+.skin-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 50vh;
+  padding: 2rem;
+  color: var(--color-text);
+  font-family: system-ui, sans-serif;
+}
+
+.skin-load-error button {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.skin-load-error button:hover {
+  background: var(--color-bg-hover);
+}
+</style>

@@ -1,0 +1,62 @@
+{
+  "supervisionUrls": ["ws://server:8010/OCPP16/5c866e81a2d9593de43efdb4"],
+  "supervisionUrlDistribution": "round-robin",
+  "log": {
+    "file": "/dev/stdout",
+    "errorFile": "/dev/stderr",
+    "console": false,
+    "rotate": false
+  },
+  "worker": {
+    "processType": "workerSet",
+    "elementsPerWorker": 1,
+    "poolMinSize": 4,
+    "poolMaxSize": 16
+  },
+  "uiServer": {
+    "enabled": true,
+    "options": {
+      "host": "::"
+    },
+    "accessPolicy": {
+      "allowedHosts": ["localhost", "127.0.0.1", "::1"],
+      "allowedOrigins": [],
+      "allowLoopbackProxy": false,
+      "requireTlsForNonLoopback": false,
+      "trustedProxies": []
+    },
+    "type": "ws",
+    "authentication": {
+      "enabled": true,
+      "type": "protocol-basic-auth",
+      "username": "admin",
+      "password": "admin"
+    }
+  },
+  "stationTemplateUrls": [
+    {
+      "file": "siemens.station-template.json",
+      "numberOfStations": 0
+    },
+    {
+      "file": "keba.station-template.json",
+      "numberOfStations": 0
+    },
+    {
+      "file": "abb.station-template.json",
+      "numberOfStations": 0
+    },
+    {
+      "file": "evlink.station-template.json",
+      "numberOfStations": 0
+    },
+    {
+      "file": "schneider.station-template.json",
+      "numberOfStations": 0
+    },
+    {
+      "file": "virtual-simple-atg.station-template.json",
+      "numberOfStations": 10
+    }
+  ]
+}
