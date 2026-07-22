@@ -115,6 +115,45 @@ STO 資料庫裡目前只有一張已註冊的 RFID/idTag：`stoIdtag202604j`
 
 舊的 `CS-SIEMENS` 那筆在 STO 的 `charge_box` table 裡沒有刪，留著無害
 （不會有東西再去連它），要清的話自己去 STO 網頁或 DB 刪即可。
+
+#### SetChargingProfile 回 `NotSupported` 的問題（2026-07-22 修好）
+
+STO 呼叫 `POST /api/v1/transactions/set_charge_profile`（送 OCPP `SetChargingProfile`）
+時，模擬器原本回 `{"status":"NotSupported"}`。
+
+**原因**：`OCPP16IncomingRequestService.handleRequestSetChargingProfile` 會先檢查
+`SupportedFeatureProfiles` 這個 configurationKey 裡有沒有 `SmartCharging`
+（程式碼在 `src/charging-station/Helpers.ts` 的 `hasFeatureProfile()` +
+`OCPP16ServiceUtils.checkFeatureProfile()`）。siemens template 原本的值是
+`"Core,LocalAuthListManagement,Reservation"`，沒有 `SmartCharging`，所以整個
+request 在做任何實際處理之前就先被擋掉回 `NotSupported`。
+
+**修法**：把 `src/assets/station-templates/siemens.station-template.json` 裡
+`SupportedFeatureProfiles` 的 `value` 加上 `SmartCharging`：
+```json
+{
+  "key": "SupportedFeatureProfiles",
+  "readonly": true,
+  "value": "Core,LocalAuthListManagement,Reservation,SmartCharging"
+}
+```
+跟改 `baseName` 一樣，這是 configurationKey，且 `ocppPersistentConfiguration`
+預設是 true，**改完一樣要清 `dist/assets/configurations/*.json` 再
+`ctl.sh stop && ctl.sh start`**，不然舊的持久化設定會蓋掉新加的 `SmartCharging`。
+
+**驗證方式**：改完後，把 `src/assets/config.json` 的 `log.level` 暫時改成
+`"debug"`（預設是 info，不會印出 `SetChargingProfile` 成功處理的訊息），重啟後
+重送同一支 curl，在 `run/simulator.log` 應該看到：
+```
+debug: ... OCPPRequestService.internalSendMessage: >> Command 'SetChargingProfile' sent response payload: [3,"...",{"status":"Accepted"}]
+```
+驗證完記得把 `log.level` 改回去（拿掉這個欄位、恢復預設），再重啟一次。
+
+註：`handleRequestSetChargingProfile` 還有其他會回 `Rejected` 的條件（例如
+`connectorId` 不存在、`TxProfile` 但該 connector 沒有進行中的交易等），
+如果之後測其他 charging profile 情境回 `Rejected` 而非 `Accepted`，先看
+是不是踩到這些條件，不一定是同一個 `SmartCharging` 問題。
+
 - `AutomaticTransactionGenerator.enable`：**預設維持 `false`**（開機/重啟不會自動跑
   ATG）。要測自動充電交易時，**不要改這個檔案**，改用 Web UI 的 `Start ATG` /
   `Stop ATG` 按鈕手動開關（見下面「Web UI」章節的「站級 ATG 開關」）。
