@@ -225,6 +225,81 @@ debug: ... OCPPRequestService.internalSendMessage: >> Command 'StatusNotificatio
   （因為 `enable` 是開機當下的初始狀態，不是「使用者當次手動開的狀態」）。
   已經改回 `false`，之後要看 ATG 行為請一律用 Web UI 按鈕開，不要再改這個欄位。
 
+## STO 端：Charge Profile 功率限制 API（2026-07-23 新增功能）
+
+跟前面幾個「修 e-mobility 讓它正確回應」的項目不同，這個是**改 STO 自己的原始碼**
+（`~/projects/blueberry-juice-local-server/ocpp_srv`，也就是 SteVe fork），
+新增的是「怎麼下達功率限制」這個操作面的功能，跟充電樁模擬器本身無關。
+
+### 背景
+
+原本 STO 要下 `set_charge_profile`／`clear_charge_profile` 都**必須先**在
+`/sto/manager/chargingProfiles` 網頁手動建一筆 charging profile（設定
+Power Limit 等欄位），拿到一個 `chargingProfilePk`，之後 API 呼叫都要帶這個 pk。
+想隨時改功率限制，就得先去網頁改/建 profile，很不方便。
+
+### 改了什麼
+
+`set_charge_profile` 新增 `powerLimitW`（必要跟 `chargingProfilePk` 互斥擇一）：
+```bash
+curl -X POST 'http://127.0.0.1:3080/sto/api/v1/transactions/set_charge_profile' \
+  -H 'Content-Type: application/json' -H 'STO-API-KEY: storocks123!' -d '{
+    "chargePointSelectList": [{"chargeBoxId":"1060101","endpointAddress":"","ocppTransport":"JSON"}],
+    "connectorId": 0,
+    "powerLimitW": 60000
+  }'
+# -> {"taskID":2,"chargingProfilePk":5}
+```
+不用先去網頁建 profile，STO 內部會自動組一個 ChargePointMaxProfile/Absolute/W
+的 profile 寫進 DB（`description` 標成 `"API set_charge_profile"`，方便在
+`/manager/chargingProfiles` 網頁分辨哪些是手動建的、哪些是 API 自動建的），
+拿到新 pk 後沿用原本的下發流程。
+
+`clear_charge_profile` 新增 `filterType: "OtherParameters"` 模式，一樣不用帶 pk：
+```bash
+curl -X POST 'http://127.0.0.1:3080/sto/api/v1/transactions/clear_charge_profile' \
+  -H 'Content-Type: application/json' -H 'STO-API-KEY: storocks123!' -d '{
+    "chargePointSelectList": [{"chargeBoxId":"1060101","endpointAddress":"","ocppTransport":"JSON"}],
+    "filterType": "OtherParameters",
+    "connectorId": 0,
+    "chargingProfilePurpose": "ChargePointMaxProfile",
+    "stackLevel": 0
+  }'
+# -> {"taskID":3}
+```
+`chargingProfilePurpose` 要用 OCPP 規格字串（如 `"ChargePointMaxProfile"`），
+不是 Java enum 名稱（`CHARGE_POINT_MAX_PROFILE`）——這是這次順便修掉的一個坑，
+最初這個欄位型別沒轉好，會要求打後者，跟 API 其他地方的慣例不一致。
+
+**舊的 `chargingProfilePk` 用法完全不受影響**，兩個端點都是「新欄位 optional，
+帶了就走新模式，不帶就跟以前一樣」。
+
+### 部署方式
+
+改完 `ocpp_srv` 的程式碼後：
+```bash
+cd ~/projects/blueberry-juice-local-server/ocpp_srv
+docker compose build app
+docker compose up -d --force-recreate app
+```
+注意：即使只指定 `app`，因為 `depends_on` 的關係 `db` 服務也會被一併 recreate
+（有確認過 `db` 的資料在真正的 docker volume 上，重建不會遺失，charge_box／
+ocpp_tag／既有 charging_profile 都會保留）。Maven 是在 container **啟動時**
+才 build（不是 `docker compose build` 那一步），且每次 recreate 都是全新
+container、`.m2` cache 沒有留著，所以第一次啟動要重新下載全部依賴，會比較久
+（實測約 1 分半）。用 `docker logs -f ocpp16_srv_app` 看到 `BUILD SUCCESS` 跟
+`Starting......... Done!` 才算真的起來。
+
+### 驗證方式
+
+用 e-mobility 模擬器（chargeBoxId `1060101`）當測試對象，暫時把
+`src/assets/config.json` 的 `log.level` 調成 `"debug"`（同前面幾個功能的驗證
+手法），送出上面兩支 curl，確認模擬器 log 收到的 OCPP 封包內容正確、且回應都是
+`{"status":"Accepted"}`，驗證完記得把 log level 改回去、重啟模擬器。
+
+完整討論脈絡與程式碼改動細節見 `ocpp_srv` 這邊的 commit
+`6013b23`（`achi001/blueberry-juice-local-server`）。
+
 ## STO 端：註冊 charge box
 
 STO 預設**不會**自動接受未註冊的 chargeBoxId，必須先在 `charge_box` table
