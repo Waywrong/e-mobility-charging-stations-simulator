@@ -548,6 +548,23 @@ docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
 | 1 | #2 | 12:25:39→12:26:40 | 0→104 Wh | Accepted |
 | 2 | #1 | 12:25:41→12:26:47 | 0→34 Wh | Accepted |
 
+### 4. hiev backend 觸發的充電（Authorize → 自動 RemoteStartTransaction）：idTag 不等於實際卡號
+
+跟上面第 3 節「ATG 自動交易」是不同機制：hiev backend 驅動的充電（透過 Web UI 站級
+`Authorize` 按鈕輸入 rfid，backend 自動發 `RemoteStartTransaction`，見
+`sto-hiev-rfid-test` skill）不能只看 STO OCPP log 的 `idTag` 欄位來確認是哪張卡在充電。
+
+實測發現（2026-07-25，測試剛綁定的卡 `0725b`，綁定流程見 `app-bind-rfid` skill）：
+`Authorize` 送出時 `idTag:"0725b"`，STO 回 Accepted 正常；但緊接著 STO 送出的
+`RemoteStartTransaction`/`StartTransaction` 卻帶著另一個完全不同、STO 內建的 idTag
+（`stoIdtag202607a`，`idtags.json` 裡的其中一個值）——**這不是 bug**，這個欄位只是
+hiev backend 拿來讓 STO 實際觸發 OCPP 指令用的「master tag」，不代表真正在充電的會員身份。
+
+真正的身份要看 **STO-HiEV Edge Logs Viewer**（`http://127.0.0.1:3013/`）的業務層記錄：
+`RET_rfid_auth` action 跟每個 connector 狀態物件裡的 `rfid` 欄位，這兩處全程正確顯示
+`0725b`。以後驗證「這次充電是哪張卡」時，一律以業務層記錄為準，不要以 OCPP 原始
+`idTag` 欄位為準。
+
 ### 監看小技巧
 用背景 `tail -F | grep` 過濾關鍵字即時看事件，比一直手動 tail 方便：
 ```bash
