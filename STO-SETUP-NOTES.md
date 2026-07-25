@@ -594,6 +594,67 @@ per-connector 狀態物件這次顯示 **`charge_type: 'APP_CHARGING'`、`rfid: 
   `docker exec ocpp16_srv_app tail -f /root/logs/steve.log` 一樣，不想開 terminal
   時可以直接用瀏覽器看。
 
+### 7. RFID 授權路徑：測試時最容易踩的三個坑
+
+2026-07-24 站台 81401 的「無 TASK_ID 卻持續充電 17 分鐘」事件（tx 751）調查時確立的
+結構性事實，測試 RFID 相關行為前務必先知道。
+
+#### (a) `/api/rx/ocpp16j_AUTH` 不是只有刷卡才會打
+
+STO 的 `CentralSystemService16_Service` 有**三個** handler 會呼叫
+`ocppTagService.getIdTagInfo()`──`startTransaction()`、`stopTransaction()`、`authorize()`，
+三者最後都走到 `decideStatus()` → `postToLocalSrv_AUTH()`。而該方法把 `_action` **寫死**成
+`"Authorize"`，也沒有把 `isStartTransactionReqContext` 傳下去，所以地端根本無法分辨
+「車主真的刷卡」與「交易訊息附帶的 idTag 檢核」。
+
+判斷方式：`steve.log` 裡若 `OcppTagService ... posted data` 之前**沒有**對應的
+`Received: [...,"Authorize",...]`，那就是交易訊息觸發的，不是刷卡。
+
+`stopTransaction()` 已於 ocpp_srv `970b647` 修正（不再檢核、`StopTransaction.conf` 也不再
+帶 `idTagInfo`）。**`startTransaction()` 仍維持原樣**——RFID 充電的雲端任務其實是由那次
+AUTH 觸發建立的，動它要連任務建立流程一起重新設計。
+
+#### (b) 兩個捷徑會讓 bug 在模擬環境「測不出來」
+
+`OcppTagService.decideStatus()` 裡有兩個提早返回：
+- `idTag.startsWith("stoIdtag")` → 直接 `ACCEPTED`，**完全不打地端**
+- `recentAcceptedTags` 快取（`expireAfterWrite(3, SECONDS)`）→ 同一 idTag 3 秒內重複檢核
+  直接從快取回 `ACCEPTED`，不問地端也不問雲端
+
+**這是模擬環境的最大盲點**：由 hiev backend 的 `RemoteStartTransaction` 驅動的充電，交易
+帶的是 master tag `stoIdtag202607a`，其 Start/StopTransaction 全部命中捷徑，永遠不會打到
+地端。要重現這條路徑上的任何問題，必須讓**交易本身**帶真實 RFID：
+
+```bash
+# 用 UI WebSocket 的 startTransaction 指定 idTag（模擬 Phihong 刷卡後自行啟動）
+# 見 app-bind-rfid skill 的 authorize-rfid.mjs，同樣的連線方式改呼叫 startTransaction
+```
+
+注意副作用：手動用真實 RFID 啟動交易，會讓地端誤判為刷卡而在約 4 秒後**再發一次**
+`RemoteStartTransaction`，在 STO DB 留下一筆孤兒 open transaction。不想要的話 2 秒內停掉。
+
+#### (c) 地端的 `AUTH` 是 per-station 單例
+
+`global.CSMS.CHARGERS[cpCode]['AUTH']` 沒有 per-request 隔離。同站台 4 秒內的兩個 AUTH
+請求會互相覆寫 `status`/`rfid`/`timestamp`。任何在 `await`／timer tick 之後讀它的邏輯，
+都必須重新確認它描述的還是自己那張卡。
+
+#### 除錯小技巧
+
+- **morgan 印出 `POST /api/rx/ocpp16j_AUTH  -  - ms  -  -`**（全是破折號）代表 handler
+  **從未送出回應**。正常長這樣：`200 405.608 ms - 8`。這是發現請求 hang 住最快的方法。
+- `postToLocalSrv_AUTH` 的 timeout 是 `Duration.ofSeconds(10)`。若某筆請求剛好花 ~10 秒
+  且結果是 `response: Unknown` + `INVALID`，那是地端 hang 住，不是卡片被拒絕。
+- `steve.log` 裡的 Java stack trace 會直接指出呼叫鏈
+  （`postToLocalSrv_AUTH ← decideStatus ← getIdTagInfo`），是確認「哪個 OCPP handler
+  觸發了 AUTH」最快的證據。
+
+#### (d) TASK_ID 只用於歸檔計費，不是啟動充電的必要條件
+
+地端一旦回 `ACCEPT`，CP 就進入準充電狀態，之後只要插槍就會開始充電，**不需要**後續的
+`RET_ocpp_charge_s`。所以「有充電但無 TASK_ID」是**計費**問題不是控制問題——這也是為什麼
+地端需要 `charge_stop if no TaskID_from_aws` 這個保護機制主動把這類充電停掉。
+
 ### 監看小技巧
 用背景 `tail -F | grep` 過濾關鍵字即時看事件，比一直手動 tail 方便：
 ```bash
