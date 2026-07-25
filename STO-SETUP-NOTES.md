@@ -565,6 +565,35 @@ hiev backend 拿來讓 STO 實際觸發 OCPP 指令用的「master tag」，不�
 `0725b`。以後驗證「這次充電是哪張卡」時，一律以業務層記錄為準，不要以 OCPP 原始
 `idTag` 欄位為準。
 
+### 5. APP 直接啟動充電（無 RFID）：跟第 4 節是不同的第二種觸發路徑
+
+HiEV APP 首頁下方「掃碼啟動充電」→ 手動輸入編號 → 模擬器把對應 connector 切到
+`Preparing` → APP 自動跳出「選擇充電策略」畫面 → APP 按「開始充電」，全程不需要
+RFID 卡（見 `sto-hiev-app_charge-test` skill）。實測 2026-07-26（tx 81，`106010101`，
+0.47 度）：STO log 一樣是 `RemoteStartTransaction`/`StartTransaction` 帶著
+`stoIdtag202607a` 這個 master tag（跟第 4 節一樣，不是真正身份）；但業務層的
+per-connector 狀態物件這次顯示 **`charge_type: 'APP_CHARGING'`、`rfid: 'NA'`**——
+這就是分辨「APP 直接啟動」vs「RFID 感應觸發」（`charge_type: 'AUTH_CHARGING'` +
+實際 `rfid`）兩種 session 的方法。
+
+### 6. 模擬測試時，還有兩個更詳細的 log 來源
+
+除了模擬器自己的 log、STO 的 `steve.log`、和業務層的 Edge Logs Viewer 之外：
+
+- **`sto_charger_local` 容器自己的 stdout**：
+  ```bash
+  docker logs -f --tail 100 sto_charger_local
+  ```
+  跟 `ocpp16_srv_app`（`docker logs` 只有 Maven build log，見上面「啟動/停止」章節）
+  **相反**——`sto_charger_local` 的 `docker logs` 真的會顯示即時的業務層執行細節：
+  API 進出點（`Entering/Exiting api/rx/...`）、原始 `MSG_from_AWS` 封包、connector
+  心跳輪詢等，比 Edge Logs Viewer 已經解析過的事件更底層。兩個容器的 log 行為不對稱，
+  別假設一樣。
+- **STO 自己的網頁版 log 檢視器**：`http://127.0.0.1:3080/sto/manager/log`
+  （登入 `sto`/`stohiev123`）——瀏覽器版的即時 `steve.log`，內容跟
+  `docker exec ocpp16_srv_app tail -f /root/logs/steve.log` 一樣，不想開 terminal
+  時可以直接用瀏覽器看。
+
 ### 監看小技巧
 用背景 `tail -F | grep` 過濾關鍵字即時看事件，比一直手動 tail 方便：
 ```bash
