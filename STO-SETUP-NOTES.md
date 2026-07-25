@@ -649,7 +649,19 @@ AUTH 觸發建立的，動它要連任務建立流程一起重新設計。
   （`postToLocalSrv_AUTH ← decideStatus ← getIdTagInfo`），是確認「哪個 OCPP handler
   觸發了 AUTH」最快的證據。
 
-#### (d) TASK_ID 只用於歸檔計費，不是啟動充電的必要條件
+#### (d) 【TODO】地端 60 秒授權窗口與 CP 韌體過期時間尚未對齊
+
+地端 `set_CSMS_CHARGERS_State()` 的 `iTHD_RFID_plug_time = 60`：刷卡被接受後若超過 60 秒才
+插槍，地端會記 `RFID timeout` 並丟棄該次授權、**不建雲端任務**，但**不會通知 CP**。
+
+CP 韌體本身也有授權過期時間，據回報約在 **45~90 秒**區間（尚未精確量測）。兩者不一致時，
+落在中間的插槍就會產生「CP 開始充電但地端已寫掉、沒有 TASK_ID」的狀況。
+
+**待辦（2026-07-26 記錄）**：實機量測 Phihong CP 的實際過期時間 —— 刷卡後等 N 秒再插槍，
+二分搜尋出 CP 不再自行啟動的臨界 N，再決定 `iTHD_RFID_plug_time` 要對齊到哪個值。
+兩邊對齊才是真正的解法；`charge_stop if no TaskID_from_aws` 只是兜底。
+
+#### (e) TASK_ID 只用於歸檔計費，不是啟動充電的必要條件
 
 地端一旦回 `ACCEPT`，CP 就進入準充電狀態，之後只要插槍就會開始充電，**不需要**後續的
 `RET_ocpp_charge_s`。所以「有充電但無 TASK_ID」是**計費**問題不是控制問題——這也是為什麼
