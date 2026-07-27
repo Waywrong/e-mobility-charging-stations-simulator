@@ -336,6 +336,39 @@ rm dist/assets/configurations/<那個 hashId>.json
 ```
 測試環境可以放心刪，下次啟動會用最新的 template 重新產生。
 
+## 停止充電後不自動回 Available：`manualPostTransactionStatus`
+
+真實充電樁停止充電後，槍還插在車上，狀態會停在 `Finishing`，
+要等駕駛「拔槍」才回 `Available`。模擬器預設卻是停止交易的同時就送 `Available`，
+等於自動幫你拔槍 —— 地端 / 雲端那些「槍還佔用中」的邏輯就測不到。
+
+template 加上這個開關即可還原真實行為（`siemens.station-template.json` 已預設開啟）：
+
+```json
+"manualPostTransactionStatus": true
+```
+
+行為差異：
+
+| 事件 | 預設 (`false`) | 開啟 (`true`) |
+| --- | --- | --- |
+| StopTransaction 完成 | `Charging` → `Available` | `Charging` → `Finishing`（停在這裡） |
+| 回到 `Available` | 自動 | **手動**：Web UI 點狀態徽章改成 Available，或用 UI WebSocket 的 `statusNotification` |
+| 交易中被排程的 ChangeAvailability(Inoperative) | 交易結束送 `Unavailable` | 一樣送 `Unavailable`（不受影響） |
+
+配 `postTransactionDelay` 一起用時，`Finishing` 只會送一次，延遲結束後不會再送 `Available`。
+
+⚠️ 副作用（這是刻意的，不是 bug）：連接器停在 `Finishing` 時
+**`RemoteStartTransaction` 會被拒絕**（`OCPP16IncomingRequestService` 明確擋掉 `Finishing`）。
+所以「停止充電 → 立刻再遠端啟動」的測試，中間一定要先手動切回 `Available`，
+這正好對應現場「沒拔槍就不能開下一筆」的行為。
+
+手動切回 Available 的 CLI 寫法（跟 `authorize-rfid.mjs` 同樣的連線方式）：
+
+```js
+await send('statusNotification', { connectorId: 1, hashIds: [hashId], status: 'Available' })
+```
+
 ## 啟動 / 停止
 
 ```bash

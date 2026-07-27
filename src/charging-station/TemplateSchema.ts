@@ -199,6 +199,7 @@ const BaseTemplateSchema = z.looseObject({
   idTagsFile: z.string().optional(),
   imsi: z.string().optional(),
   mainVoltageMeterValues: z.boolean().optional(),
+  manualPostTransactionStatus: z.boolean().optional(),
   messageTriggerSupport: z.record(z.string(), z.boolean()).optional(),
   meteringPerTransaction: z.boolean().optional(),
   meterSerialNumberPrefix: z.string().optional(),

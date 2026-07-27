@@ -49,8 +49,25 @@ export const sendAndSetConnectorStatus = async (
 }
 
 /**
+ * Resolves the status a connector is held in after a transaction ends when the
+ * automatic release to Available is disabled.
+ * @param chargingStation - Target charging station
+ * @returns Finishing for OCPP 1.6, Occupied for OCPP 2.0.x
+ */
+const getHeldPostTransactionStatus = (chargingStation: ChargingStation): ConnectorStatusEnum =>
+  chargingStation.stationInfo?.ocppVersion === OCPPVersion.VERSION_16
+    ? ConnectorStatusEnum.Finishing
+    : ConnectorStatusEnum.Occupied
+
+/**
  * Sends Available or Unavailable connector status after a transaction ends.
  * Re-evaluates station and connector availability to determine the target status.
+ *
+ * When `manualPostTransactionStatus` is enabled, the automatic release to
+ * Available is suppressed and the connector is held in Finishing (OCPP 1.6) or
+ * Occupied (OCPP 2.0.x) until its status is set manually. A transition to
+ * Unavailable is still sent, so an availability change scheduled during the
+ * transaction still takes effect at transaction end.
  * @param chargingStation - Target charging station
  * @param connectorId - Connector ID to transition
  */
@@ -58,11 +75,21 @@ export const sendPostTransactionStatus = async (
   chargingStation: ChargingStation,
   connectorId: number
 ): Promise<void> => {
-  const status =
+  let status: ConnectorStatusEnum =
     chargingStation.isChargingStationAvailable() &&
     chargingStation.isConnectorAvailable(connectorId)
       ? ConnectorStatusEnum.Available
       : ConnectorStatusEnum.Unavailable
+  if (
+    status === ConnectorStatusEnum.Available &&
+    chargingStation.stationInfo?.manualPostTransactionStatus === true
+  ) {
+    status = getHeldPostTransactionStatus(chargingStation)
+    if (chargingStation.getConnectorStatus(connectorId)?.status === status) {
+      // Already held, e.g. Finishing was sent before the postTransactionDelay sleep
+      return
+    }
+  }
   await sendAndSetConnectorStatus(chargingStation, {
     connectorId,
     connectorStatus: status,

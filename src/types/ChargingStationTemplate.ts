@@ -103,6 +103,15 @@ export interface ChargingStationTemplate {
   idTagsFile?: string
   imsi?: string
   mainVoltageMeterValues?: boolean
+  /**
+   * Hold the connector in its post-transaction state instead of releasing it to
+   * Available when a transaction stops. In OCPP 1.6 the connector stays in
+   * Finishing, in OCPP 2.0.x in Occupied, until the status is set manually
+   * (simulates the cable staying plugged in until the driver unplugs it).
+   * A pending Inoperative availability change is still applied. Ignored when
+   * `false` (default behavior).
+   */
+  manualPostTransactionStatus?: boolean
   messageTriggerSupport?: Record<MessageTrigger, boolean>
   meteringPerTransaction?: boolean
   meterSerialNumberPrefix?: string
