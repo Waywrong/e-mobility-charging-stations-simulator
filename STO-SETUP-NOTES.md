@@ -93,7 +93,7 @@ STO 資料庫裡目前只有一張已註冊的 RFID/idTag：`stoIdtag202604j`
 1. 改 `baseName`（見上面）
 2. 去 STO 註冊新的 chargeBoxId（STO 不接受未註冊的 ID）：
    ```bash
-   docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+   docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
      -e "INSERT INTO charge_box (charge_box_id, insert_connector_status_after_transaction_msg) VALUES ('1060101', 0);"
    ```
 3. chargingStationId 變了 → hashId 也變了 → 舊的持久化設定檔
@@ -107,7 +107,7 @@ STO 資料庫裡目前只有一張已註冊的 RFID/idTag：`stoIdtag202604j`
      連到 `.../CentralSystemService/1060101`、`BootNotification ... 'Accepted'`
    - STO DB 反查：
      ```bash
-     docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+     docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
        -e "SELECT charge_box_id, charge_point_vendor, charge_point_model, last_heartbeat_timestamp FROM charge_box WHERE charge_box_id='1060101';"
      ```
      要看到 vendor/model 有值、`last_heartbeat_timestamp` 是剛剛的時間
@@ -243,7 +243,7 @@ Power Limit 等欄位），拿到一個 `chargingProfilePk`，之後 API 呼叫�
 `set_charge_profile` 新增 `powerLimitW`（必要跟 `chargingProfilePk` 互斥擇一）：
 ```bash
 curl -X POST 'http://127.0.0.1:3080/sto/api/v1/transactions/set_charge_profile' \
-  -H 'Content-Type: application/json' -H 'STO-API-KEY: storocks123!' -d '{
+  -H 'Content-Type: application/json' -H 'STO-API-KEY: <STO_API_KEY>' -d '{
     "chargePointSelectList": [{"chargeBoxId":"1060101","endpointAddress":"","ocppTransport":"JSON"}],
     "connectorId": 0,
     "powerLimitW": 60000
@@ -258,7 +258,7 @@ curl -X POST 'http://127.0.0.1:3080/sto/api/v1/transactions/set_charge_profile' 
 `clear_charge_profile` 新增 `filterType: "OtherParameters"` 模式，一樣不用帶 pk：
 ```bash
 curl -X POST 'http://127.0.0.1:3080/sto/api/v1/transactions/clear_charge_profile' \
-  -H 'Content-Type: application/json' -H 'STO-API-KEY: storocks123!' -d '{
+  -H 'Content-Type: application/json' -H 'STO-API-KEY: <STO_API_KEY>' -d '{
     "chargePointSelectList": [{"chargeBoxId":"1060101","endpointAddress":"","ocppTransport":"JSON"}],
     "filterType": "OtherParameters",
     "connectorId": 0,
@@ -308,16 +308,16 @@ STO 預設**不會**自動接受未註冊的 chargeBoxId，必須先在 `charge_
 `charge_box_id` 這個欄位）：
 
 ```bash
-docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
   -e "INSERT INTO charge_box (charge_box_id, insert_connector_status_after_transaction_msg) VALUES ('CS-SIEMENS', 0);"
 ```
 
 DB 連線資訊（來自 `docker inspect ocpp16_srv_db` 的環境變數）：
-- DB 名稱: `stevedb`　user: `steve`　password: `stohiev`
+- DB 名稱: `stevedb`　user: `steve`　password: `<DB_PASSWORD>`（已輪替，實際值見密碼管理工具，不寫進 repo）
 
 確認已註冊：
 ```bash
-docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
   -e "SELECT charge_box_id, registration_status FROM charge_box;"
 ```
 
@@ -548,7 +548,7 @@ tail -f /tmp/simulator.log
 
 ### 2. 從 STO 這邊反查（不要只信模擬器自己講的話）
 ```bash
-docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
   -e "SELECT charge_box_id, charge_point_vendor, charge_point_model, last_heartbeat_timestamp FROM charge_box WHERE charge_box_id='CS-SIEMENS';"
 ```
 有 vendor/model 資料 + 有更新的 heartbeat 時間戳 = 雙邊都確認連線成功。
@@ -564,10 +564,10 @@ OCPP16ResponseService.handleResponseStopTransaction: Transaction with id X STOPP
 
 同樣要去 STO DB 反查交易紀錄與電表資料，比對模擬器 log 講的是否一致：
 ```bash
-docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
   -e "SELECT transaction_pk, connector_pk, id_tag, start_timestamp, start_value, stop_timestamp, stop_value, stop_reason FROM transaction;"
 
-docker exec ocpp16_srv_db mysql -u steve -pstohiev stevedb \
+docker exec ocpp16_srv_db mysql -u steve -p'<DB_PASSWORD>' stevedb \
   -e "SELECT transaction_pk, value, reading_context, measurand, unit FROM connector_meter_value;"
 ```
 預期：每筆交易都有 `start_value` → `stop_value`（度數遞增），
@@ -623,7 +623,7 @@ per-connector 狀態物件這次顯示 **`charge_type: 'APP_CHARGING'`、`rfid: 
   心跳輪詢等，比 Edge Logs Viewer 已經解析過的事件更底層。兩個容器的 log 行為不對稱，
   別假設一樣。
 - **STO 自己的網頁版 log 檢視器**：`http://127.0.0.1:3080/sto/manager/log`
-  （登入 `sto`/`stohiev123`）——瀏覽器版的即時 `steve.log`，內容跟
+  （登入 `sto`/`<WEB_PASSWORD>`）——瀏覽器版的即時 `steve.log`，內容跟
   `docker exec ocpp16_srv_app tail -f /root/logs/steve.log` 一樣，不想開 terminal
   時可以直接用瀏覽器看。
 
