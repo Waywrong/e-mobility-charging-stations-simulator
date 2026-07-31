@@ -1,8 +1,11 @@
 name: Sandcastle
 
+# Nightly schedule disabled on this personal working copy: it requires
+# maintainer-only credentials (PI_AUTH_CONTENT / OPENCODE_AUTH_CONTENT for the
+# github-copilot-backed `pi` and `opencode-ai` agents) that were never
+# configured here and were failing the "Validate secrets" step every night.
+# Kept as workflow_dispatch in case it's ever wanted for a one-off manual run.
 on:
-  schedule:
-    - cron: '0 22 * * *'
   workflow_dispatch:
 
 concurrency:
