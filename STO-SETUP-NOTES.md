@@ -390,6 +390,12 @@ template 加上開關（`siemens.station-template.json` 已預設開啟）：
 "statusNotificationInfo": ""
 ```
 
+⚠️ **旗標預設 false，而且是「每個 template 各自設定」——不會從 siemens template 繼承。**
+用自訂 template 的機器（例如 10603 的 `sto-10603.station-template.json`）**必須自己加這一行**，
+否則 `git pull` + 重 build 之後送出的仍然是三欄，而且**看起來一切正常、沒有任何錯誤**。
+2026-09-10 在 10603 實際踩過一次。改完 template 之後要 stop → `rm -f dist/assets/configurations/*.json`
+→ start，`pnpm build` 只重建程式碼，不會清掉舊的 persisted config。
+
 | 欄位 | 值 |
 | --- | --- |
 | `vendorId` | 取自 template 的 `chargePointVendor` —— **不另設一個值**，才不會出現 Boot 說 A、Status 說 B 這種真機不會有的組合 |
