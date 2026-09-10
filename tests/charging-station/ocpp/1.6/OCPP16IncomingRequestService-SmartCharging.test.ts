@@ -19,6 +19,7 @@ import {
   GenericStatus,
   OCPP16ChargingProfilePurposeType,
   OCPP16ChargingProfileStatus,
+  OCPP16ChargingRateUnitType,
   OCPP16ClearChargingProfileStatus,
   OCPP16StandardParametersKey,
 } from '../../../../src/types/index.js'
@@ -145,6 +146,107 @@ await describe('OCPP16IncomingRequestService — SmartCharging', async () => {
 
       // Assert
       assert.strictEqual(response.status, OCPP16ChargingProfileStatus.REJECTED)
+    })
+
+    // ratedPowerW — real chargers accept a profile only within what the unit can deliver
+    await it('should reject a W profile above ratedPowerW', () => {
+      // Arrange
+      const { station, testableService } = context
+      upsertConfigurationKey(
+        station,
+        OCPP16StandardParametersKey.SupportedFeatureProfiles,
+        'Core,SmartCharging'
+      )
+      Object.assign(station.stationInfo ?? {}, { ratedPowerW: 160000 })
+      const profile = ChargingProfileFixtures.createChargePointMaxProfile(3, [
+        { limit: 197000, startPeriod: 0 },
+      ])
+      profile.chargingSchedule.chargingRateUnit = OCPP16ChargingRateUnitType.WATT
+      const request: SetChargingProfileRequest = { connectorId: 0, csChargingProfiles: profile }
+
+      // Act
+      const response = testableService.handleRequestSetChargingProfile(station, request)
+
+      // Assert
+      assert.strictEqual(response.status, OCPP16ChargingProfileStatus.REJECTED)
+      assert.strictEqual(station.getConnectorStatus(0)?.chargingProfiles?.length ?? 0, 0)
+    })
+
+    await it('should accept a W profile at exactly ratedPowerW', () => {
+      const { station, testableService } = context
+      upsertConfigurationKey(
+        station,
+        OCPP16StandardParametersKey.SupportedFeatureProfiles,
+        'Core,SmartCharging'
+      )
+      Object.assign(station.stationInfo ?? {}, { ratedPowerW: 160000 })
+      const profile = ChargingProfileFixtures.createChargePointMaxProfile(3, [
+        { limit: 160000, startPeriod: 0 },
+      ])
+      profile.chargingSchedule.chargingRateUnit = OCPP16ChargingRateUnitType.WATT
+      const request: SetChargingProfileRequest = { connectorId: 0, csChargingProfiles: profile }
+
+      const response = testableService.handleRequestSetChargingProfile(station, request)
+
+      assert.strictEqual(response.status, OCPP16ChargingProfileStatus.ACCEPTED)
+    })
+
+    await it('should compare against the highest period in a multi-period schedule', () => {
+      const { station, testableService } = context
+      upsertConfigurationKey(
+        station,
+        OCPP16StandardParametersKey.SupportedFeatureProfiles,
+        'Core,SmartCharging'
+      )
+      Object.assign(station.stationInfo ?? {}, { ratedPowerW: 160000 })
+      const profile = ChargingProfileFixtures.createChargePointMaxProfile(3, [
+        { limit: 50000, startPeriod: 0 },
+        { limit: 197000, startPeriod: 3600 },
+      ])
+      profile.chargingSchedule.chargingRateUnit = OCPP16ChargingRateUnitType.WATT
+      const request: SetChargingProfileRequest = { connectorId: 0, csChargingProfiles: profile }
+
+      const response = testableService.handleRequestSetChargingProfile(station, request)
+
+      assert.strictEqual(response.status, OCPP16ChargingProfileStatus.REJECTED)
+    })
+
+    await it('should accept an A profile without checking the rating', () => {
+      // A cannot be converted to W without the negotiated voltage and phases.
+      const { station, testableService } = context
+      upsertConfigurationKey(
+        station,
+        OCPP16StandardParametersKey.SupportedFeatureProfiles,
+        'Core,SmartCharging'
+      )
+      Object.assign(station.stationInfo ?? {}, { ratedPowerW: 1 })
+      const profile = ChargingProfileFixtures.createChargePointMaxProfile(3, [
+        { limit: 32, startPeriod: 0 },
+      ])
+      const request: SetChargingProfileRequest = { connectorId: 0, csChargingProfiles: profile }
+
+      const response = testableService.handleRequestSetChargingProfile(station, request)
+
+      assert.strictEqual(response.status, OCPP16ChargingProfileStatus.ACCEPTED)
+    })
+
+    await it('should accept any W profile when ratedPowerW is unset (upstream behavior)', () => {
+      const { station, testableService } = context
+      upsertConfigurationKey(
+        station,
+        OCPP16StandardParametersKey.SupportedFeatureProfiles,
+        'Core,SmartCharging'
+      )
+      delete station.stationInfo?.ratedPowerW
+      const profile = ChargingProfileFixtures.createChargePointMaxProfile(3, [
+        { limit: 9999000, startPeriod: 0 },
+      ])
+      profile.chargingSchedule.chargingRateUnit = OCPP16ChargingRateUnitType.WATT
+      const request: SetChargingProfileRequest = { connectorId: 0, csChargingProfiles: profile }
+
+      const response = testableService.handleRequestSetChargingProfile(station, request)
+
+      assert.strictEqual(response.status, OCPP16ChargingProfileStatus.ACCEPTED)
     })
 
     await it('should return NotSupported when SmartCharging feature profile is not enabled', () => {

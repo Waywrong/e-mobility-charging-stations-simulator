@@ -143,6 +143,18 @@ export interface ChargingStationTemplate {
    * `coherentMeterValues` is `false` or absent.
    */
   randomSeed?: number
+  /**
+   * The charge point's rated power in W. When set, a SetChargingProfile whose
+   * schedule asks for more than this is answered `Rejected`, as real hardware
+   * does — a charger accepts a profile only if its limit is within what the
+   * unit can deliver. Leave unset (default) to accept every profile, which is
+   * the upstream behavior.
+   *
+   * Only schedules in `W` are checked: converting `A` to W needs the voltage
+   * and phase count the vehicle actually negotiated, which the simulator does
+   * not model, so an `A` schedule is accepted and a warning is logged.
+   */
+  ratedPowerW?: number
   reconnectExponentialDelay?: boolean
   registrationMaxRetries?: number
   remoteAuthorization?: boolean

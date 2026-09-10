@@ -431,6 +431,57 @@ rm -f dist/assets/configurations/*.json   # 不清會沿用舊的 persisted conf
 ./ctl.sh restart
 ```
 
+## 樁會拒絕超過額定的功率上限：`ratedPowerW`
+
+真機接受 `SetChargingProfile` 的條件是 **`limit ≤ 樁的額定功率`**，超過就回 `Rejected`
+（sto_charger issue #10，零反例）。模擬器預設**照單全收**，所以地端「功率上限有沒有真的生效」
+這條路徑在模擬器上永遠測不到 —— 而那正是 2026-09-09 六站被鎖 20 kW 的唯一安全網缺口
+（issue #53 第 1 項）：地端只看 steve REST 的 HTTP 200 就印 `SetChargeProfile Okay`，
+**樁端回 Rejected 完全看不到**，潛伏兩個月。
+
+template 加上額定值即可還原：
+
+```json
+"ratedPowerW": 160000
+```
+
+| 情況 | 回覆 |
+| --- | --- |
+| 未設定（預設） | 一律 `Accepted`，與上游相同 |
+| schedule 單位是 `W`，最高一段 `limit` ≤ `ratedPowerW` | `Accepted` |
+| schedule 單位是 `W`，最高一段 `limit` > `ratedPowerW` | **`Rejected`**，且不寫入 profile |
+| schedule 單位是 `A` | `Accepted` + 一則 warning（A 換算 W 需要車輛協商的電壓與相數，模擬器沒有模型，不猜） |
+
+多段 schedule 取**最高**那一段比較，與真機一致。
+
+各 template 目前的值（依據都是 Accepted/Rejected 實測邊界，不是原廠規格）：
+
+| template | `ratedPowerW` | 依據 |
+| --- | --- | --- |
+| `siemens`（1060101，Phihong AC 兩槍 7.0+7.5） | 15000 | 30001 的 `AXSC*` 樁實測 20000 被拒 ⇒ 額定 < 20 kW |
+| `sto-1060102-dover`（Dover DC 一槍 160） | 160000 | 型號字串 `YLUXD160KE`；⚠️ **未經實測**，艦隊只送過 ≤99000 且全部 Accepted |
+
+⚠️ **這兩個值本身是推測，不要拿它們回頭當真機額定的證據。** 它們的用途是讓
+「Rejected 這條路徑」在模擬器上可被觸發，不是宣稱真機就是這個數字。真機額定要靠
+在測試站上做 Accepted/Rejected 邊界探測（sto_charger issue #10 的五步探測表）。
+
+### 怎麼製造一次 Rejected
+
+把 `ratedPowerW` 調到地端會下發的值以下，重啟，然後跑一次充電：
+
+```bash
+# 地端下發 min(站契約, 該樁各槍加總) − 安全值，例如 1060102 是 157000
+python3 - <<'EOF'
+import json; p='src/assets/station-templates/sto-1060102-dover.station-template.json'
+t=json.load(open(p)); t['ratedPowerW']=100000
+json.dump(t,open(p,'w'),indent=2,ensure_ascii=False); open(p,'a').write('\n')
+EOF
+rm -f dist/assets/configurations/*.json && ./ctl.sh restart
+```
+
+**沒有覆蓋到的失敗形態**：「OCPP 訊息根本沒送出去」（steve 回 HTTP 200 且 DB 建了 profile，
+但在 `SetChargingProfileTask.getOcpp16Request` 拋 NPE）。那是 CSMS 側的行為，模擬器造不出來。
+
 ## 啟動 / 停止
 
 ```bash

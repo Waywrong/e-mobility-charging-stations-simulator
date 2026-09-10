@@ -219,6 +219,7 @@ const BaseTemplateSchema = z.looseObject({
   powerUnit: z.string().optional(),
   randomConnectors: z.boolean().optional(),
   randomSeed: z.number().int().optional(),
+  ratedPowerW: z.number().positive().optional(),
   reconnectExponentialDelay: z.boolean().optional(),
   registrationMaxRetries: z.number().optional(),
   remoteAuthorization: z.boolean().optional(),

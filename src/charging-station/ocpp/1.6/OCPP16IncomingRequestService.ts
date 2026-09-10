@@ -55,6 +55,7 @@ import {
   OCPP16ChargePointStatus,
   type OCPP16ChargingProfile,
   OCPP16ChargingProfilePurposeType,
+  OCPP16ChargingRateUnitType,
   type OCPP16ChargingSchedule,
   type OCPP16ClearChargingProfileRequest,
   type OCPP16ClearChargingProfileResponse,
@@ -1850,6 +1851,25 @@ export class OCPP16IncomingRequestService extends OCPPIncomingRequestService<OCP
         } than the started transaction id ${connectorStatus.transactionId?.toString()}`
       )
       return OCPP16Constants.OCPP_SET_CHARGING_PROFILE_RESPONSE_REJECTED
+    }
+    const { ratedPowerW } = chargingStation.stationInfo ?? {}
+    if (ratedPowerW != null) {
+      const { chargingRateUnit, chargingSchedulePeriod } = csChargingProfiles.chargingSchedule
+      if (chargingRateUnit !== OCPP16ChargingRateUnitType.WATT) {
+        // Converting A to W needs the voltage and phase count the vehicle negotiated,
+        // which is not modelled here. Accept rather than guess, but say so.
+        logger.warn(
+          `${chargingStation.logPrefix()} ${moduleName}.handleRequestSetChargingProfile: ratedPowerW is set but the schedule is in '${chargingRateUnit}', not W — accepting without checking the rating`
+        )
+      } else {
+        const requested = Math.max(...chargingSchedulePeriod.map(period => period.limit))
+        if (requested > ratedPowerW) {
+          logger.warn(
+            `${chargingStation.logPrefix()} ${moduleName}.handleRequestSetChargingProfile: Rejecting charging profile(s) on connector id ${connectorId.toString()}: ${requested.toString()} W exceeds the rated ${ratedPowerW.toString()} W`
+          )
+          return OCPP16Constants.OCPP_SET_CHARGING_PROFILE_RESPONSE_REJECTED
+        }
+      }
     }
     OCPP16ServiceUtils.setChargingProfile(chargingStation, connectorId, csChargingProfiles)
     logger.debug(
