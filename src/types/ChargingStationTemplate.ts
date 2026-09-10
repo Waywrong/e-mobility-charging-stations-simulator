@@ -148,6 +148,21 @@ export interface ChargingStationTemplate {
   remoteAuthorization?: boolean
   resetTime?: number
   stationInfoPersistentConfiguration?: boolean
+  /**
+   * Value sent in the `info` field of StatusNotification when
+   * `statusNotificationVendorFields` is enabled. Real chargers differ here:
+   * Phihong sends an empty string, Winline/Dover sends `No error to report`.
+   * Defaults to an empty string. Ignored when the flag is off.
+   */
+  statusNotificationInfo?: string
+  /**
+   * Send the optional `info`, `timestamp`, `vendorErrorCode` and `vendorId`
+   * fields on StatusNotification, as real chargers do. `vendorId` carries
+   * `chargePointVendor`, so a single template value stays consistent with what
+   * BootNotification reports. Off by default, which keeps the minimal
+   * `connectorId`/`errorCode`/`status` payload.
+   */
+  statusNotificationVendorFields?: boolean
   stopTransactionsOnStopped?: boolean
   supervisionPassword?: string
   supervisionUrlOcppConfiguration?: boolean

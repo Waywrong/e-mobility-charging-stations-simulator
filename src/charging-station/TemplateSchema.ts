@@ -224,6 +224,8 @@ const BaseTemplateSchema = z.looseObject({
   remoteAuthorization: z.boolean().optional(),
   resetTime: z.number().optional(),
   stationInfoPersistentConfiguration: z.boolean().optional(),
+  statusNotificationInfo: z.string().optional(),
+  statusNotificationVendorFields: z.boolean().optional(),
   stopTransactionsOnStopped: z.boolean().optional(),
   supervisionPassword: z.string().optional(),
   supervisionUrlOcppConfiguration: z.boolean().optional(),

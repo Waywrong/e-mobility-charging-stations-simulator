@@ -369,6 +369,46 @@ template 加上這個開關即可還原真實行為（`siemens.station-template.
 await send('statusNotification', { connectorId: 1, hashIds: [hashId], status: 'Available' })
 ```
 
+## StatusNotification 送出廠牌欄位：`statusNotificationVendorFields`
+
+真實充電樁的 `StatusNotification` 會帶 OCPP 1.6 的選用欄位，模擬器預設只送三個必填欄位：
+
+| 來源 | payload |
+| --- | --- |
+| 模擬器預設 | `{"connectorId":2,"errorCode":"NoError","status":"Available"}` |
+| Phihong/Zerova 真機 | `{"connectorId":1,"errorCode":"NoError","info":"","status":"Available","timestamp":"…","vendorId":"Phihong Technology","vendorErrorCode":""}` |
+| Winline/Dover 真機 | `{"connectorId":0,"errorCode":"NoError","status":"Available","info":"No error to report","timestamp":"…","vendorId":"winline","vendorErrorCode":""}` |
+
+少了 `vendorId` 就測不到地端 `sto_charger` 從 `StatusNotification` 認廠牌的那條路徑
+（`vendor_map.js`，sto_charger issue #35）——那是真機的主要來源，`BootNotification` 只是備援。
+`vendorErrorCode` 缺席同樣讓 `check_is_vendorErrorCode()` 的正規化測不到。
+
+template 加上開關（`siemens.station-template.json` 已預設開啟）：
+
+```json
+"statusNotificationVendorFields": true,
+"statusNotificationInfo": ""
+```
+
+| 欄位 | 值 |
+| --- | --- |
+| `vendorId` | 取自 template 的 `chargePointVendor` —— **不另設一個值**，才不會出現 Boot 說 A、Status 說 B 這種真機不會有的組合 |
+| `info` | `statusNotificationInfo`，預設空字串；要模擬 Dover 就填 `"No error to report"` |
+| `timestamp` | 送出當下 |
+| `vendorErrorCode` | 空字串（呼叫端有給就用給的，例如故障情境） |
+
+呼叫端明確帶了哪一欄，就以呼叫端的為準，所以要模擬帶錯誤碼的 Faulted 仍然可行。
+關閉（預設）時行為與上游完全相同。
+
+換廠牌做混合站測試時只改 `chargePointVendor` 一處，Boot 與 Status 會一起變：
+
+```bash
+sed -i 's/"chargePointVendor": ".*"/"chargePointVendor": "winline"/' \
+  src/assets/station-templates/siemens.station-template.json
+rm -f dist/assets/configurations/*.json   # 不清會沿用舊的 persisted config
+./ctl.sh restart
+```
+
 ## 啟動 / 停止
 
 ```bash

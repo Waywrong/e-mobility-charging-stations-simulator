@@ -184,16 +184,31 @@ export class OCPP16ServiceUtils {
   }
 
   /**
+   * @param chargingStation - Target charging station
    * @param commandParams - Status notification parameters
    * @returns Formatted OCPP 1.6 StatusNotification request payload
    */
   public static buildStatusNotificationRequest (
+    chargingStation: ChargingStation,
     commandParams: OCPP16StatusNotificationRequest
   ): OCPP16StatusNotificationRequest {
-    return {
+    const request = {
       connectorId: commandParams.connectorId,
       errorCode: commandParams.errorCode,
       status: commandParams.status,
+    } satisfies OCPP16StatusNotificationRequest
+    if (chargingStation.stationInfo?.statusNotificationVendorFields !== true) {
+      return request
+    }
+    // Real chargers send the optional fields on every StatusNotification, and a
+    // CSMS may key vendor-specific behavior off `vendorId`. `vendorId` reuses
+    // `chargePointVendor` so it cannot drift from what BootNotification reports.
+    return {
+      ...request,
+      info: commandParams.info ?? chargingStation.stationInfo.statusNotificationInfo ?? '',
+      timestamp: commandParams.timestamp ?? new Date(),
+      vendorErrorCode: commandParams.vendorErrorCode ?? '',
+      vendorId: commandParams.vendorId ?? chargingStation.stationInfo.chargePointVendor,
     } satisfies OCPP16StatusNotificationRequest
   }
 

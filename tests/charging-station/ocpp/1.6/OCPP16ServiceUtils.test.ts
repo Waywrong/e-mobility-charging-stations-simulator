@@ -545,7 +545,9 @@ await describe('OCPP16ServiceUtils — pure functions', async () => {
         status: OCPP16ChargePointStatus.Available,
       }
 
-      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(input)
+      const { station } = createMockChargingStation({ ocppVersion: OCPPVersion.VERSION_16 })
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
 
       assert.strictEqual(result.errorCode, ChargePointErrorCode.NO_ERROR)
     })
@@ -557,7 +559,9 @@ await describe('OCPP16ServiceUtils — pure functions', async () => {
         status: OCPP16ChargePointStatus.Charging,
       }
 
-      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(input)
+      const { station } = createMockChargingStation({ ocppVersion: OCPPVersion.VERSION_16 })
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
 
       assert.strictEqual(result.connectorId, 2)
     })
@@ -569,7 +573,9 @@ await describe('OCPP16ServiceUtils — pure functions', async () => {
         status: OCPP16ChargePointStatus.Charging,
       }
 
-      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(input)
+      const { station } = createMockChargingStation({ ocppVersion: OCPPVersion.VERSION_16 })
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
 
       assert.strictEqual(result.status, OCPP16ChargePointStatus.Charging)
     })
@@ -581,7 +587,9 @@ await describe('OCPP16ServiceUtils — pure functions', async () => {
         status: OCPP16ChargePointStatus.Faulted,
       }
 
-      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(input)
+      const { station } = createMockChargingStation({ ocppVersion: OCPPVersion.VERSION_16 })
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
 
       assert.strictEqual(result.errorCode, ChargePointErrorCode.CONNECTOR_LOCK_FAILURE)
     })
@@ -592,9 +600,92 @@ await describe('OCPP16ServiceUtils — pure functions', async () => {
         status: OCPP16ChargePointStatus.Available,
       } as unknown as OCPP16StatusNotificationRequest
 
-      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(input)
+      const { station } = createMockChargingStation({ ocppVersion: OCPPVersion.VERSION_16 })
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
 
       assert.strictEqual(result.errorCode, undefined)
+    })
+
+    await it('should omit the vendor fields by default', () => {
+      const { station } = createMockChargingStation({ ocppVersion: OCPPVersion.VERSION_16 })
+      const input: OCPP16StatusNotificationRequest = {
+        connectorId: 1,
+        errorCode: ChargePointErrorCode.NO_ERROR,
+        status: OCPP16ChargePointStatus.Available,
+      }
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
+
+      assert.deepStrictEqual(Object.keys(result).sort(), ['connectorId', 'errorCode', 'status'])
+    })
+
+    await it('should send the vendor fields when statusNotificationVendorFields is enabled', () => {
+      const { station } = createMockChargingStation({
+        ocppVersion: OCPPVersion.VERSION_16,
+        stationInfo: {
+          chargePointVendor: 'Phihong Technology',
+          statusNotificationVendorFields: true,
+        },
+      })
+      const input: OCPP16StatusNotificationRequest = {
+        connectorId: 1,
+        errorCode: ChargePointErrorCode.NO_ERROR,
+        status: OCPP16ChargePointStatus.Available,
+      }
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
+
+      assert.strictEqual(result.vendorId, 'Phihong Technology')
+      assert.strictEqual(result.vendorErrorCode, '')
+      assert.strictEqual(result.info, '')
+      assert.ok(result.timestamp instanceof Date)
+    })
+
+    await it('should use statusNotificationInfo for the info field', () => {
+      const { station } = createMockChargingStation({
+        ocppVersion: OCPPVersion.VERSION_16,
+        stationInfo: {
+          chargePointVendor: 'winline',
+          statusNotificationInfo: 'No error to report',
+          statusNotificationVendorFields: true,
+        },
+      })
+      const input: OCPP16StatusNotificationRequest = {
+        connectorId: 0,
+        errorCode: ChargePointErrorCode.NO_ERROR,
+        status: OCPP16ChargePointStatus.Available,
+      }
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
+
+      assert.strictEqual(result.info, 'No error to report')
+      assert.strictEqual(result.vendorId, 'winline')
+    })
+
+    await it('should let the caller override the vendor fields', () => {
+      const { station } = createMockChargingStation({
+        ocppVersion: OCPPVersion.VERSION_16,
+        stationInfo: {
+          chargePointVendor: 'Phihong Technology',
+          statusNotificationVendorFields: true,
+        },
+      })
+      const timestamp = new Date('2026-09-10T00:00:00.000Z')
+      const input: OCPP16StatusNotificationRequest = {
+        connectorId: 1,
+        errorCode: ChargePointErrorCode.OTHER_ERROR,
+        info: 'boom',
+        status: OCPP16ChargePointStatus.Faulted,
+        timestamp,
+        vendorErrorCode: '023983',
+      }
+
+      const result = OCPP16ServiceUtils.buildStatusNotificationRequest(station, input)
+
+      assert.strictEqual(result.info, 'boom')
+      assert.strictEqual(result.vendorErrorCode, '023983')
+      assert.strictEqual(result.timestamp, timestamp)
     })
   })
 

@@ -139,7 +139,7 @@ export class OCPP16RequestService extends OCPPRequestService {
           ...params,
         }
       case OCPP16RequestCommand.STATUS_NOTIFICATION:
-        return OCPP16ServiceUtils.buildStatusNotificationRequest({
+        return OCPP16ServiceUtils.buildStatusNotificationRequest(chargingStation, {
           errorCode: ChargePointErrorCode.NO_ERROR,
           ...params,
         } as OCPP16StatusNotificationRequest)

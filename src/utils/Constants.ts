@@ -110,6 +110,7 @@ export class Constants {
     remoteAuthorization: true,
     resetTime: 30000,
     stationInfoPersistentConfiguration: true,
+    statusNotificationVendorFields: false,
     stopTransactionsOnStopped: true,
     supervisionUrlOcppConfiguration: false,
     supervisionUrlOcppKey: VendorParametersKey.ConnectionUrl,
