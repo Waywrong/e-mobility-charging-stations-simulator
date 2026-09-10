@@ -406,6 +406,22 @@ template 加上開關（`siemens.station-template.json` 已預設開啟）：
 呼叫端明確帶了哪一欄，就以呼叫端的為準，所以要模擬帶錯誤碼的 Faulted 仍然可行。
 關閉（預設）時行為與上游完全相同。
 
+### 設計決策：不提供獨立的 `vendorId` 設定值（刻意，不是還沒做）
+
+有人會想加一個 `statusNotificationVendorId`，好讓 Status 與 Boot 報不同廠牌、
+用來分辨 CSMS 是從哪一條路徑學到廠牌的。**刻意不做**：真機的這兩個欄位就是同一個值，
+多一個能與 `chargePointVendor` 不一致的設定，就多一種真機不會出現的組合，
+而那種組合驗出來的行為對現場沒有意義。
+
+要分辨學習來源，用觀測而不是造假資料 —— 清掉 CSMS 已學到的值，
+**只送 `TriggerMessage StatusNotification`、不觸發 BootNotification**，看它寫進什麼：
+
+```
+[vendor_map] 1060101: (none) -> Phihong (raw="Phihong Technology", model="", via StatusNotification)
+```
+
+`model` 為空字串本身也是 Status 的指紋 —— StatusNotification 不帶型號，BootNotification 帶。
+
 換廠牌做混合站測試時只改 `chargePointVendor` 一處，Boot 與 Status 會一起變：
 
 ```bash
