@@ -507,13 +507,14 @@ SoC 20～59% 約 103～111 kW、60 幾 % 97、70 幾 % 77、80 幾 % 54、90 幾
 2. **持久化的 OCPP 設定會蓋掉 template。** 改 `MeterValuesSampledData`／`MeterValueSampleInterval` 後要停模擬器、
    改 `dist/assets/configurations/<hashId>.json` 裡對應的值，再啟動（見上面〈持久化設定會蓋掉 template 的修改〉）。
    template 頂層的 stationInfo 欄位（例如 `coherentMeterValues`、`meteringPerTransaction`）不受影響：改了 template，`templateHash` 跟著變，重啟就從 template 重建；被持久化檔留住的只有 OCPP 設定鍵。
-3. **RFID 在這支槍上會被地端反轉**（Winline 的 8 碼 hex 卡號會被反轉位元組順序，跟綁定時的值對不上），測試改用 EVCCID 啟動。
+3. **這支槍上的 RFID 會被地端反轉**：地端收到 Winline 樁送來的 8 碼 hex 卡號時會反轉位元組順序（模擬器送的是原值），跟綁定時的值對不上，所以測試改用 EVCCID 啟動。
 
-**累計讀數**：template 沒變時，單純重啟會保留（11-21 12:36、13:47 兩次實測）；改了 template 就會歸零（11-21 13:15 那次剛好跟改 template 同時）。
-後者有讀碼支持：`ChargingStation.ts` 的 `initialize()` 只在持久化檔的 `templateHash` 和 template 相同時才從檔案還原連接器狀態，不同就從 template 初始化。
-雲端逐場算差值，所以歸零不影響計費。
+**累計讀數**：template 沒變時，單純重啟會保留。11-21 有兩個證據，來源不同：12:36 那次看 steve.log 的 MeterValues（重啟前 tx 512 停在 7,703 Wh，重啟後 tx 513 第一筆 7,732）；13:47 那次重啟後沒再跑交易，只有模擬器持久化檔裡的 2,101.77，等於重啟前 tx 519 的停止讀數。
+改了 template 就會歸零（11-21 13:15 那次剛好跟改 template 同時；沒有單獨做實驗）。依據是讀碼：`ChargingStation.ts` 的 `initialize()` 只在持久化檔的 `templateHash` 和 template 相同時才從檔案還原連接器狀態，不同就從 template 初始化，電表讀數設為 0。
+上面〈持久化設定會蓋掉 template 的修改〉說的刪掉持久化檔，同樣會讓讀數歸零。
+雲端逐場算差值，所以歸零不影響計費：歸零後的第一場 dev 任務 8697（tx 518）`meterStart` 0、`meterStop` 1,051，雲端記 1.05 度。
 
-操作與測試步驟（餘額檢查、EVCCID 啟動、回歸 E4）在 skill `sto-hiev-sim-driver` 的〈DC 快充模擬槍〉一節。
+操作與測試步驟在 skill `sto-hiev-sim-driver`：〈DC 快充模擬槍〉一節（設定、EVCCID 啟動），測試前的餘額檢查在它前一節〈測試前先查測試會員餘額〉，回歸的 E4（EVCCID 啟動＋App 停止）在 `regress/e2e.sh`。
 
 ## 啟動 / 停止
 
