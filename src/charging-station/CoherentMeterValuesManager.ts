@@ -160,6 +160,7 @@ export class CoherentMeterValuesManager {
     const session = createCoherentSession(this.chargingStation, {
       connectorId,
       profiles: this.evProfiles.profiles,
+      rampUpDurationMs: this.chargingStation.stationInfo.coherentRampUpDurationMs,
       rootSeed: resolveRootSeed(this.chargingStation.stationInfo),
       transactionId,
     })
