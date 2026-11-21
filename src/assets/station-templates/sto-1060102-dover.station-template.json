@@ -17,6 +17,7 @@
   "coherentMeterValues": true,
   "evProfilesFile": "ev-profiles-sto-dc.json",
   "coherentRampUpDurationMs": 240000,
+  "meteringPerTransaction": false,
   "Configuration": {
     "configurationKey": [
       {
