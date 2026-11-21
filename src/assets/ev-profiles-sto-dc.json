@@ -1,0 +1,22 @@
+{
+  "profiles": [
+    {
+      "id": "sto-fleet-dc-2026-11-20",
+      "weight": 1,
+      "batteryCapacityWh": 65000,
+      "maxPowerW": 112000,
+      "initialSocPercentMin": 15,
+      "initialSocPercentMax": 50,
+      "rampShape": "linear",
+      "chargingCurve": [
+        { "socPercent": 0, "powerFraction": 1.0 },
+        { "socPercent": 55, "powerFraction": 1.0 },
+        { "socPercent": 65, "powerFraction": 0.87 },
+        { "socPercent": 75, "powerFraction": 0.69 },
+        { "socPercent": 85, "powerFraction": 0.48 },
+        { "socPercent": 95, "powerFraction": 0.18 },
+        { "socPercent": 100, "powerFraction": 0.02 }
+      ]
+    }
+  ]
+}
