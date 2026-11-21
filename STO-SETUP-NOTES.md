@@ -482,6 +482,37 @@ rm -f dist/assets/configurations/*.json && ./ctl.sh restart
 **沒有覆蓋到的失敗形態**：「OCPP 訊息根本沒送出去」（steve 回 HTTP 200 且 DB 建了 profile，
 但在 `SetChargingProfileTask.getOcpp16Request` 拋 NPE）。那是 CSMS 側的行為，模擬器造不出來。
 
+## DC 快充模擬槍 `106010201`：照正式區曲線出電（2026-11-21，PR #4／#5）
+
+`1060102`（Dover／Winline，一槍 160 kW）改成 DC 快充槍，MeterValues 用上游的 coherent 模式產生
+（V → P → I → ΔE → SoC 一條物理鏈），曲線照正式區校過。
+
+| 設定（`sto-1060102-dover.station-template.json`） | 值 | 說明 |
+|---|---|---|
+| `currentOutType`／`voltageOut` | `DC`／`400` | 雲端與地端照槍型判 AC／DC |
+| `coherentMeterValues`＋`evProfilesFile` | `true`＋`ev-profiles-sto-dc.json` | 一個 profile：電池 65 kWh、最高 112 kW、起始 SoC 15～50%、SoC 55% 起降功率、100% 時約 0 |
+| `coherentRampUpDurationMs` | `240000` | **本 fork 新增的 template 欄位**（PR #4）；上游寫死 5 s，正式區要 88～305 s 才到 100 kW |
+| `meteringPerTransaction` | `false` | **一定要關**（PR #5），原因見下 |
+| `MeterValuesSampledData`／`MeterValueSampleInterval` | 電量、功率、SoC、電壓、電流／`15` | Winline 正式樁 15 秒一筆 |
+
+曲線來源：正式區 2026-11-20 五站、21 場峰值超過 100 kW 的任務（≥100 kW 時每 30 秒約 0.92 度；
+SoC 20～59% 約 103～111 kW、60 幾 % 97、70 幾 % 77、80 幾 % 54、90 幾 % 20）。先用這版，之後有落差再校。
+
+**三個坑**
+
+1. **`meteringPerTransaction` 不關會從第二場起多算度數。** coherent 模式的 MeterValues 一律送樁的**累計**讀數，
+   `meterStart`／`meterStop` 卻跟著 `meteringPerTransaction`（預設 true＝這一場的度數，`meterStart` 永遠 0）。
+   第一場電表從 0 開始看不出來；第二場雲端用「累計 − 0」算（dev 任務 8692：實充約 0.58 度、記成 8.32 度）。
+   關掉之後三者都是累計讀數，跟正式樁一樣。
+2. **持久化的 OCPP 設定會蓋掉 template。** 改 `MeterValuesSampledData`／`MeterValueSampleInterval` 後要停模擬器、
+   改 `dist/assets/configurations/<hashId>.json` 裡對應的值，再啟動（見上面〈持久化設定會蓋掉 template 的修改〉）。
+3. **RFID 在這支槍上會被地端反轉**（Winline 的 8 碼 hex 卡號會被反轉位元組順序，跟綁定時的值對不上），測試改用 EVCCID 啟動。
+
+**累計讀數**：template 沒變時，單純重啟會保留（11-21 12:36、13:47 兩次實測）；11-21 13:15 那次歸零剛好跟改 template 同時
+（推論，未證實）。雲端逐場算差值，所以歸零不影響計費。
+
+操作與測試步驟（餘額檢查、EVCCID 啟動、回歸 E4）在 skill `sto-hiev-sim-driver` 的〈DC 快充模擬槍〉一節。
+
 ## 啟動 / 停止
 
 ```bash
