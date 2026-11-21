@@ -182,6 +182,7 @@ const BaseTemplateSchema = z.looseObject({
   chargePointSerialNumberPrefix: z.string().optional(),
   chargePointVendor: z.string().min(1),
   coherentMeterValues: z.boolean().optional(),
+  coherentRampUpDurationMs: z.number().int().nonnegative().optional(),
   commandsSupport: CommandsSupportSchema.optional(),
   Configuration: OcppConfigurationSchema.optional(),
   Connectors: z.record(z.string().regex(/^\d+$/), ConnectorStatusSchema).optional(),

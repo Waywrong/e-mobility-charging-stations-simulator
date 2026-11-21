@@ -70,6 +70,14 @@ export interface ChargingStationTemplate {
    * per-measurand generation is used and behavior is unchanged.
    */
   coherentMeterValues?: boolean
+  /**
+   * Ramp-up duration in milliseconds for coherent MeterValues sessions
+   * (time from StartTransaction to full-power acceptance). Consumed only
+   * when `coherentMeterValues` is `true`. Absent ⇒
+   * `Constants.DEFAULT_COHERENT_RAMP_UP_DURATION_MS`. Real DC sessions take
+   * minutes, not seconds (STO fleet 2026-11-20: 88–305 s to reach 100 kW).
+   */
+  coherentRampUpDurationMs?: number
   commandsSupport?: CommandsSupport
   Configuration?: ChargingStationOcppConfiguration
   Connectors?: Record<string, ConnectorStatus>
