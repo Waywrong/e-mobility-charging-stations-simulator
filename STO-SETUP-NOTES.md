@@ -489,8 +489,8 @@ rm -f dist/assets/configurations/*.json && ./ctl.sh restart
 
 | 設定（`sto-1060102-dover.station-template.json`） | 值 | 說明 |
 |---|---|---|
-| `currentOutType`／`voltageOut` | `DC`／`400` | 雲端與地端照槍型判 AC／DC |
-| `coherentMeterValues`＋`evProfilesFile` | `true`＋`ev-profiles-sto-dc.json` | 一個 profile：電池 65 kWh、最高 112 kW、起始 SoC 15～50%、SoC 55% 起降功率、100% 時約 0 |
+| `currentOutType`／`voltageOut` | `DC`／`400` | 只給模擬器自己的物理計算用，OCPP 1.6 不會把 AC／DC 傳出去。地端判 AC／DC 看的是**雲端後台設定的槍型**（Type1／Type2＝AC，sto_charger `kw_limit.js` `isAcPile`），兩邊要設成一致 |
+| `coherentMeterValues`＋`evProfilesFile` | `true`＋`ev-profiles-sto-dc.json` | 一個 profile：電池 65 kWh、最高 112 kW、起始 SoC 15～50%、SoC 55% 起降功率、SoC 到 100% 時功率夾到 0 |
 | `coherentRampUpDurationMs` | `240000` | **本 fork 新增的 template 欄位**（PR #4）；上游寫死 5 s，正式區要 88～305 s 才到 100 kW |
 | `meteringPerTransaction` | `false` | **一定要關**（PR #5），原因見下 |
 | `MeterValuesSampledData`／`MeterValueSampleInterval` | 電量、功率、SoC、電壓、電流／`15` | Winline 正式樁 15 秒一筆 |
@@ -506,10 +506,12 @@ SoC 20～59% 約 103～111 kW、60 幾 % 97、70 幾 % 77、80 幾 % 54、90 幾
    關掉之後三者都是累計讀數，跟正式樁一樣。
 2. **持久化的 OCPP 設定會蓋掉 template。** 改 `MeterValuesSampledData`／`MeterValueSampleInterval` 後要停模擬器、
    改 `dist/assets/configurations/<hashId>.json` 裡對應的值，再啟動（見上面〈持久化設定會蓋掉 template 的修改〉）。
+   template 頂層的 stationInfo 欄位（例如 `coherentMeterValues`、`meteringPerTransaction`）不受影響：改了 template，`templateHash` 跟著變，重啟就從 template 重建；被持久化檔留住的只有 OCPP 設定鍵。
 3. **RFID 在這支槍上會被地端反轉**（Winline 的 8 碼 hex 卡號會被反轉位元組順序，跟綁定時的值對不上），測試改用 EVCCID 啟動。
 
-**累計讀數**：template 沒變時，單純重啟會保留（11-21 12:36、13:47 兩次實測）；11-21 13:15 那次歸零剛好跟改 template 同時
-（推論，未證實）。雲端逐場算差值，所以歸零不影響計費。
+**累計讀數**：template 沒變時，單純重啟會保留（11-21 12:36、13:47 兩次實測）；改了 template 就會歸零（11-21 13:15 那次剛好跟改 template 同時）。
+後者有讀碼支持：`ChargingStation.ts` 的 `initialize()` 只在持久化檔的 `templateHash` 和 template 相同時才從檔案還原連接器狀態，不同就從 template 初始化。
+雲端逐場算差值，所以歸零不影響計費。
 
 操作與測試步驟（餘額檢查、EVCCID 啟動、回歸 E4）在 skill `sto-hiev-sim-driver` 的〈DC 快充模擬槍〉一節。
 
