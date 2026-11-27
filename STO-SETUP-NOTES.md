@@ -205,6 +205,28 @@ debug: ... OCPPRequestService.internalSendMessage: >> Command 'StatusNotificatio
 `bootStatus` 就設定成 `Unavailable`，不是 bug——這個功能只是「如實重新公告目前狀態」，
 不會把狀態改成 `Available`。）驗證完記得把 `log.level` 改回去、重啟一次。
 
+> **2026-11-27 更正：connector 1 的 `bootStatus: "Unavailable"` 已從 siemens template 移除。**
+> 上面這段 log 是當時的實際輸出，保留不改。移除的理由：
+> - 這行是上游範例 template 帶進來的（repo 第一個 commit），不是刻意設定的。
+> - 模擬器**每次連上 CSMS** 都會執行 `startMessageSequence` → `getBootConnectorStatus`，
+>   沒有交易的槍會被重設成 `bootStatus`。所以不只開機，地端重建、steve 重啟、
+>   中斷測試的 `closeConnection`／`openConnection` 之後，槍 1 都會靜默變回 `Unavailable`
+>   （實例：2026-11-26 23:49:18 還是 `Available`，23:49:41 重連後，下一次 5 分鐘 Trigger 就是 `Unavailable`）。
+> - 這只是「顯示狀態」，可用性仍是 `Operative`：模擬器照樣接受 `RemoteStartTransaction`
+>   （只在 `Finishing` 或 `Inoperative` 時拒絕），和真樁報 `Unavailable` 的行為不一致。
+> - 地端原生層不處理 `Unavailable`（sto_charger #218），地端／雲端一直顯示槍 1「可使用」，
+>   和模擬器 Web UI 對不上；另外每 5 分鐘一行 `'Unavailable' to 'Unavailable' is not allowed` 警告。
+>
+> 要讓某把槍「不可用」，改用 `ChangeAvailability`（`type: Inoperative`）：可用性會持久化，
+> 模擬器也會拒絕啟動，比較接近真樁。
+>
+> **套用步驟**：先確認沒有測試在跑 → `./ctl.sh restart`（會 `pnpm build`，把 template 複製到 `dist/`）→
+> Web UI 確認 1060101 槍 1、槍 2 都是 `AVAILABLE`。
+> 讀碼：template 內容變了 ⇒ `templateHash` 不同 ⇒ 啟動時槍狀態改從 template 初始化，不沿用
+> `dist/assets/configurations/` 的存檔（存檔檔名用 `getHashId`，只看型號／廠牌等欄位，不會變）。
+> 重啟後槍 1 若仍是 `UNAVAILABLE`，再 `./ctl.sh stop`、刪掉含 `1060101` 的存檔
+> （`grep -l 1060101 dist/assets/configurations/*.json`）、`./ctl.sh start`。
+
 - `AutomaticTransactionGenerator.enable`：**預設維持 `false`**（開機/重啟不會自動跑
   ATG）。要測自動充電交易時，**不要改這個檔案**，改用 Web UI 的 `Start ATG` /
   `Stop ATG` 按鈕手動開關（見下面「Web UI」章節的「站級 ATG 開關」）。

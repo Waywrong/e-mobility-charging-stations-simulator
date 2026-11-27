@@ -65,7 +65,6 @@
   "Connectors": {
     "0": {},
     "1": {
-      "bootStatus": "Unavailable",
       "MeterValues": [
         {
           "unit": "Wh",
