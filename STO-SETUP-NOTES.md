@@ -226,6 +226,8 @@ debug: ... OCPPRequestService.internalSendMessage: >> Command 'StatusNotificatio
 > `dist/assets/configurations/` 的存檔（存檔檔名用 `getHashId`，只看型號／廠牌等欄位，不會變）。
 > 重啟後槍 1 若仍是 `UNAVAILABLE`，再 `./ctl.sh stop`、刪掉含 `1060101` 的存檔
 > （`grep -l 1060101 dist/assets/configurations/*.json`）、`./ctl.sh start`。
+> 這個 grep 在 peter 機（10601）會抓到 3 個檔：現役的 `44db029b…`，以及 10-04、10-07 留下的舊 template 存檔
+> `ccd94fcc…`、`f890c6b2…`。三個全刪無害。注意：存檔一刪，裡面的交易與可用性狀態也不會沿用。
 
 - `AutomaticTransactionGenerator.enable`：**預設維持 `false`**（開機/重啟不會自動跑
   ATG）。要測自動充電交易時，**不要改這個檔案**，改用 Web UI 的 `Start ATG` /
